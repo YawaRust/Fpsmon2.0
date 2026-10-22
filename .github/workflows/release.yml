@@ -1,0 +1,254 @@
+name: Release
+
+# Авторелиз: версия по Conventional Commits → EXE → тег → changelog → GitHub Release.
+# Стартует и от push в main/master, и вручную (Actions → Release → Run workflow).
+
+'on':
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Принудительный инкремент (пусто = авто по коммитам)'
+        required: false
+        default: ''
+        type: choice
+        options: ['', patch, minor, major]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 1. Новая версия по Conventional Commits
+  # ─────────────────────────────────────────────────────────────
+  version:
+    name: Версия и changelog
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+      changelog: ${{ steps.notes.outputs.body }}
+      should_release: ${{ steps.bump.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Вычислить версию
+        id: bump
+        shell: bash
+        run: |
+          set -e
+          LAST=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -z "$LAST" ]; then
+            # релизов ещё не было — считаем всю историю
+            RANGE="HEAD"
+            MAJOR=0; MINOR=0; PATCH=0
+          else
+            RANGE="$LAST..HEAD"
+            VER="${LAST#v}"
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
+            MAJOR=${MAJOR:-0}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
+          fi
+
+          echo "Последний тег: ${LAST:-нет} · база $MAJOR.$MINOR.$PATCH"
+
+          if [ "$RANGE" = "HEAD" ]; then
+            COMMITS=$(git log -n 400 --pretty=format:"%s" || true)
+          else
+            COMMITS=$(git log -n 400 "$RANGE" --pretty=format:"%s" || true)
+          fi
+
+          MANUAL="${{ github.event.inputs.bump || '' }}"
+          EVENT="${GITHUB_EVENT_NAME}"
+
+          if [ -z "$COMMITS" ] && [ "$EVENT" != "workflow_dispatch" ]; then
+            echo "Коммитов с $LAST нет — релиз не требуется."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -n "$MANUAL" ] && [ "$MANUAL" != "''" ]; then
+            BUMP="$MANUAL"
+          else
+            BUMP="patch"
+            if echo "$COMMITS" | grep -qE '^feat(\(.+\))?!?:'; then BUMP="minor"; fi
+            if echo "$COMMITS" | grep -qiE '(BREAKING CHANGE|^[a-z]+(\(.+\))?!:)'; then BUMP="major"; fi
+          fi
+
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            *)     PATCH=$((PATCH + 1)) ;;
+          esac
+
+          echo "Новая версия: $MAJOR.$MINOR.$PATCH (инкремент: $BUMP)"
+          echo "new_version=$MAJOR.$MINOR.$PATCH" >> "$GITHUB_OUTPUT"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "last_tag=${LAST:-v0.0.0}" >> "$GITHUB_OUTPUT"
+
+      - name: Сгенерировать changelog
+        id: notes
+        if: steps.bump.outputs.should_release == 'true'
+        shell: bash
+        env:
+          LAST_TAG: ${{ steps.bump.outputs.last_tag }}
+          NEWV: ${{ steps.bump.outputs.new_version }}
+        run: |
+          set -e
+          if [ "$LAST_TAG" = "v0.0.0" ]; then RANGE="HEAD"; else RANGE="$LAST_TAG..HEAD"; fi
+
+          {
+            echo "body<<BODY_EOF"
+            echo "## v$NEWV — $(date +%Y-%m-%d)"
+            echo ""
+
+            FEATS=$(git log "$RANGE" --pretty=format:"- %s (\`%h\`)" --grep="^feat" 2>/dev/null || echo "")
+            FIXES=$(git log "$RANGE" --pretty=format:"- %s (\`%h\`)" --grep="^fix"  2>/dev/null || echo "")
+            PERF=$( git log "$RANGE" --pretty=format:"- %s (\`%h\`)" --grep="^perf" 2>/dev/null || echo "")
+            OTHER=$(git log "$RANGE" --pretty=format:"- %s (\`%h\`)" --invert-grep --grep="^feat" --grep="^fix" --grep="^perf" --grep="^chore" --grep="^docs" --grep="^ci" 2>/dev/null || echo "")
+
+            [ -n "$FEATS" ] && echo "### Новое" && echo "$FEATS" && echo ""
+            [ -n "$FIXES" ] && echo "### Исправления" && echo "$FIXES" && echo ""
+            [ -n "$PERF" ]  && echo "### Производительность" && echo "$PERF" && echo ""
+            [ -n "$OTHER" ] && echo "### Прочее" && echo "$OTHER" && echo ""
+
+            if [ "$LAST_TAG" != "v0.0.0" ]; then
+              echo "**Полный список изменений**: https://github.com/${{ github.repository }}/compare/$LAST_TAG...v$NEWV"
+            fi
+            echo "BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. Сборка EXE на Windows
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: Сборка Windows x64
+    needs: version
+    if: needs.version.outputs.should_release == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MSVC окружение
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Конфигурация CMake
+        shell: pwsh
+        env:
+          APPVER: ${{ needs.version.outputs.new_version }}
+        run: |
+          # ВАЖНО: -D в кавычках — PowerShell ломает "-DAPP_VERSION=0.0.1" без них
+          cmake -B build -S native -G Ninja "-DCMAKE_BUILD_TYPE=Release" "-DAPP_VERSION=$env:APPVER"
+
+      - name: Сборка
+        shell: pwsh
+        run: cmake --build build --config Release --parallel
+
+      - name: Проверить размер бинарника
+        shell: pwsh
+        run: |
+          $exe = "build/YawaFPSHUD.exe"
+          if (-not (Test-Path $exe)) { Write-Error "Бинарник не найден: $exe"; exit 1 }
+          $kb = [math]::Round((Get-Item $exe).Length / 1KB, 1)
+          Write-Host "Размер YawaFPSHUD.exe: $kb КБ"
+          if ($kb -gt 1024) { Write-Warning "Бинарник превысил бюджет 1 МБ" }
+
+      - name: Упаковать portable-архив
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.version.outputs.new_version }}"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item build/YawaFPSHUD.exe dist/
+          if (Test-Path README.md) { Copy-Item README.md dist/ }
+          if (Test-Path LICENSE)   { Copy-Item LICENSE dist/ }
+          Compress-Archive -Path dist/* -DestinationPath "yawafps-hud-v$ver-x64.zip" -Force
+
+      - name: Контрольная сумма SHA-256
+        shell: pwsh
+        run: |
+          $ver = "${{ needs.version.outputs.new_version }}"
+          $h = (Get-FileHash "yawafps-hud-v$ver-x64.zip" -Algorithm SHA256).Hash
+          "$h  yawafps-hud-v$ver-x64.zip" | Out-File SHA256SUMS.txt -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: |
+            yawafps-hud-*.zip
+            SHA256SUMS.txt
+            build/YawaFPSHUD.exe
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. Тег + CHANGELOG.md + GitHub Release
+  # ─────────────────────────────────────────────────────────────
+  publish:
+    name: Публикация релиза
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: assets
+
+      - name: Создать тег (если ещё не существует)
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          VER="${{ needs.version.outputs.new_version }}"
+          if git rev-parse "v$VER" >/dev/null 2>&1; then
+            echo "Тег v$VER уже существует — пропускаю"
+          else
+            git tag -a "v$VER" -m "Release v$VER"
+            git push origin "v$VER"
+          fi
+
+      - name: Обновить CHANGELOG.md
+        shell: bash
+        continue-on-error: true
+        run: |
+          {
+            echo "# Changelog"
+            echo ""
+            echo "${{ needs.version.outputs.changelog }}"
+            echo ""
+            tail -n +3 CHANGELOG.md 2>/dev/null || true
+          } > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "docs(changelog): v${{ needs.version.outputs.new_version }} [skip ci]" || echo "Нечего коммитить"
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: Опубликовать GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.new_version }}
+          name: YawaFPS HUD v${{ needs.version.outputs.new_version }}
+          body: |
+            ${{ needs.version.outputs.changelog }}
+
+            ---
+
+            **Установка:** распакуйте архив и запустите `YawaFPSHUD.exe` — установщик не нужен.
+            Настройки открываются прямо в игре по `Shift+F11`.
+          files: |
+            assets/yawafps-hud-*.zip
+            assets/SHA256SUMS.txt
+            assets/YawaFPSHUD.exe
+          make_latest: true
+          prerelease: false

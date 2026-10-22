@@ -1,0 +1,18 @@
+# build
+/build/
+/out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# artifacts
+*.exe
+*.zip
+*.obj
+*.pdb
+config.ini
+*.log
+
+# web
+node_modules/
+dist/
