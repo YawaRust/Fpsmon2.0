@@ -11,8 +11,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(MSVC)
-    add_compile_options(/O2 /GL /GS- /Oi /Ot /W3 /permissive- /utf-8)
-    add_link_options(/LTCG /OPT:REF /OPT:ICF)
+    add_compile_options(/W3 /permissive- /utf-8)
+    add_compile_options($<$<CONFIG:Release,RelWithDebInfo>:/O2>
+                       $<$<CONFIG:Release,RelWithDebInfo>:/GL>
+                       $<$<CONFIG:Release,RelWithDebInfo>:/GS->
+                       $<$<CONFIG:Release,RelWithDebInfo>:/Oi>
+                       $<$<CONFIG:Release,RelWithDebInfo>:/Ot>)
+    add_link_options($<$<CONFIG:Release,RelWithDebInfo>:/LTCG>
+                     $<$<CONFIG:Release,RelWithDebInfo>:/OPT:REF>
+                     $<$<CONFIG:Release,RelWithDebInfo>:/OPT:ICF>)
 endif()
 
 # ── Иконка ───────────────────────────────────────────────────────────────────
