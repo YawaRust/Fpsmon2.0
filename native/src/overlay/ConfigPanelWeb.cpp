@@ -9,6 +9,43 @@
 #include <wrl.h>
 using namespace Microsoft::WRL;
 
+
+static bool jsonDouble(const wchar_t* json, const wchar_t* key, double& out) {
+    wchar_t pat[64];
+    swprintf_s(pat, L"\"%s\":", key);
+    const wchar_t* p = wcsstr(json, pat);
+    if (!p) return false;
+    p += wcslen(pat);
+    while (*p == L' ' || *p == L'\t') p++;
+    wchar_t* end = nullptr;
+    out = wcstod(p, &end);
+    return end != p;
+}
+
+static bool jsonBool(const wchar_t* json, const wchar_t* key, bool& out) {
+    wchar_t pat[64];
+    swprintf_s(pat, L"\"%s\":", key);
+    const wchar_t* p = wcsstr(json, pat);
+    if (!p) return false;
+    p += wcslen(pat);
+    while (*p == L' ' || *p == L'\t') p++;
+    if (wcsncmp(p, L"true", 4) == 0) { out = true; return true; }
+    if (wcsncmp(p, L"false", 5) == 0) { out = false; return true; }
+    return false;
+}
+
+static bool jsonString(const wchar_t* json, const wchar_t* key, wchar_t* out, size_t n) {
+    wchar_t pat[64];
+    swprintf_s(pat, L"\"%s\":\"", key);
+    const wchar_t* p = wcsstr(json, pat);
+    if (!p) return false;
+    p += wcslen(pat);
+    size_t i = 0;
+    while (p[i] && p[i] != L'"' && i + 1 < n) { out[i] = p[i]; i++; }
+    out[i] = L'\0';
+    return i > 0;
+}
+
 struct ConfigPanelWeb::Impl {
     ComPtr<ICoreWebView2Controller> controller;
     ComPtr<ICoreWebView2>           webview;
@@ -62,11 +99,43 @@ bool ConfigPanelWeb::create(HWND parentHwnd) {
                                         LPWSTR json = nullptr;
                                         args->get_WebMessageAsJson(&json);
                                         if (json) {
-                                            // Простой парсинг
                                             Settings& s = self->m_parent->settings();
                                             if (wcsstr(json, L"\"type\":\"close\"")) {
                                                 s.save();
                                                 self->m_parent->toggleConfig();
+                                            } else if (wcsstr(json, L"\"type\":\"update\"")) {
+                                                double v = 0;
+                                                if (jsonDouble(json, L"fontSize", v)) s.fontSize = (float)v;
+                                                if (jsonDouble(json, L"opacity", v)) s.opacity = (float)v;
+                                                if (jsonDouble(json, L"bgOpacity", v)) s.bgOpacity = (float)v;
+                                                if (jsonDouble(json, L"padding", v)) s.padding = (int)v;
+                                                if (jsonDouble(json, L"rowGap", v)) s.rowGap = (int)v;
+                                                if (jsonDouble(json, L"blockGap", v)) s.blockGap = (int)v;
+                                                if (jsonDouble(json, L"updateInterval", v)) s.updateIntervalMs = (int)v;
+                                                if (jsonDouble(json, L"fpsInterval", v)) s.fpsIntervalMs = (int)v;
+                                                bool b = false;
+                                                if (jsonBool(json, L"showBorder", b)) s.showBorder = b;
+                                                if (jsonBool(json, L"fontBold", b)) s.fontBold = b;
+                                                if (jsonBool(json, L"clickThrough", b)) s.clickThrough = b;
+                                                if (jsonBool(json, L"alwaysOnTop", b)) s.alwaysOnTop = b;
+                                                if (jsonBool(json, L"rounded", b)) {
+                                                    if (b && s.cornerRadius == 0) s.cornerRadius = 10;
+                                                    if (!b) s.cornerRadius = 0;
+                                                }
+                                                wchar_t buf[64] = {};
+                                                if (jsonString(json, L"theme", buf, 64)) {
+                                                    std::string t = wideToUtf8(buf);
+                                                    if (!t.empty()) s.applyTheme(t);
+                                                }
+                                                if (jsonString(json, L"direction", buf, 64)) {
+                                                    s.direction = (wcscmp(buf, L"row") == 0) ? 1 : 0;
+                                                }
+                                                char cbuf[16] = {};
+                                                if (jsonString(json, L"captureMode", buf, 64)) {
+                                                    std::string cm = wideToUtf8(buf);
+                                                    s.captureAllow = (cm == "allow");
+                                                }
+                                                self->m_parent->applySettings(false);
                                             }
                                             CoTaskMemFree(json);
                                         }

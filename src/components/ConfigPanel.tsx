@@ -619,10 +619,12 @@ export default function ConfigPanel({
       </div>
 
       <div className="flex gap-1.5 border-t border-white/10 bg-white/[0.02] p-2">
-        <button onClick={() => downloadIni(s)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-neon px-3 py-2 font-mono text-[10px] font-bold text-ink transition-colors hover:bg-[#5bff9f]">
-          <Download size={12} /> config.ini
-        </button>
+        {!window.chrome?.webview && (
+          <button onClick={() => downloadIni(s)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-md bg-neon px-3 py-2 font-mono text-[10px] font-bold text-ink transition-colors hover:bg-[#5bff9f]">
+            <Download size={12} /> config.ini
+          </button>
+        )}
         <button onClick={() => setSettings(defaultSettings())}
           className="grid h-[32px] w-[32px] place-items-center rounded-md border border-white/12 text-slate-400 transition-colors hover:border-white/30 hover:text-white" title="Сбросить всё">
           <RotateCcw size={13} />

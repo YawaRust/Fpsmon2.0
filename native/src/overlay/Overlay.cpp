@@ -261,7 +261,21 @@ LRESULT CALLBACK Overlay::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     if (m == WM_TIMER) { o->poll(16); return 0; }
     if (m == WM_HOTKEY) { if (wp == 101) o->toggleConfig(); if (wp == 100) o->toggleVisible(); return 0; }
     if (m == WM_LBUTTONDOWN) { o->m_drag = true; SetCapture(h); GetCursorPos(&o->m_dragStart); return 0; }
-    if (m == WM_LBUTTONUP) { o->m_drag = false; ReleaseCapture(); return 0; }
-    if (m == WM_MOUSEMOVE && o->m_drag) { POINT pt; GetCursorPos(&pt); RECT r; GetWindowRect(h, &r); SetWindowPos(h, nullptr, r.left + pt.x - o->m_dragStart.x, r.top + pt.y - o->m_dragStart.y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE); o->m_dragStart = pt; return 0; }
+    if (m == WM_LBUTTONUP) {
+        o->m_drag = false; ReleaseCapture();
+        o->settings().save();
+        return 0;
+    }
+    if (m == WM_MOUSEMOVE && o->m_drag) {
+        POINT pt; GetCursorPos(&pt); RECT r; GetWindowRect(h, &r);
+        int nx = r.left + pt.x - o->m_dragStart.x;
+        int ny = r.top + pt.y - o->m_dragStart.y;
+        SetWindowPos(h, nullptr, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+        o->m_dragStart = pt;
+        o->settings().position = 4; // custom
+        o->settings().customX = nx;
+        o->settings().customY = ny;
+        return 0;
+    }
     return DefWindowProcW(h, m, wp, lp);
 }
