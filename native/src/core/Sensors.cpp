@@ -2,6 +2,15 @@
 #include "../utils/Logger.h"
 #include <powrprof.h>
 
+struct CpuPowerInfo {
+    unsigned long Number;
+    unsigned long MaxMhz;
+    unsigned long CurrentMhz;
+    unsigned long MhzLimit;
+    unsigned long MaxIdleState;
+    unsigned long CurrentIdleState;
+};
+
 static uint64_t fileTime64(const FILETIME& ft) {
     return ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
 }
@@ -259,9 +268,9 @@ void SystemMonitor::pollSys() {
     {
         SYSTEM_INFO si{}; GetSystemInfo(&si);
         DWORD n = si.dwNumberOfProcessors > 0 ? si.dwNumberOfProcessors : 1;
-        std::vector<PROCESSOR_POWER_INFORMATION> info(n);
+        std::vector<CpuPowerInfo> info(n);
         if (CallNtPowerInformation(ProcessorInformation, nullptr, 0,
-                info.data(), (ULONG)(n * sizeof(PROCESSOR_POWER_INFORMATION))) == 0) {
+                info.data(), (ULONG)(n * sizeof(CpuPowerInfo))) == 0) {
             DWORD mx = 0;
             for (DWORD i = 0; i < n; i++)
                 if (info[i].CurrentMhz > mx) mx = info[i].CurrentMhz;
