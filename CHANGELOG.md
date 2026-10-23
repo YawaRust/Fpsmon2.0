@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.0.4 — 2026-10-23
+
+### Исправления
+- Merge pull request #7 from YawaRust/arena/c48e5641-fpsmon2-0 ()
+- fix: resolve coordinate clamp type mismatch ()
+- fix: make native settings interactive and clarify sensors ()
+
+**Полный список изменений**: https://github.com/YawaRust/Fpsmon2.0/compare/v0.0.3...v0.0.4
+
 ## v0.0.3 — 2026-10-23
 
 ### Исправления
