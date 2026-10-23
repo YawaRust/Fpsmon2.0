@@ -117,6 +117,18 @@ bool SystemMonitor::init(int gpuIndex) {
         m_gpuNames.push_back(L"GPU");
         LUID z{}; m_gpuLuids.push_back(z);
     }
+    // Выбираем адаптер с наибольшим объёмом видеопамяти по умолчанию
+    int best = 0;
+    float bestMem = -1.f;
+    for (int i = 0; i < (int)m_adapters.size(); i++) {
+        if (!m_adapters[i]) continue;
+        DXGI_ADAPTER_DESC1 d{};
+        if (SUCCEEDED(m_adapters[i]->GetDesc1(&d))) {
+            float mem = (float)(d.DedicatedVideoMemory / (1024 * 1024));
+            if (mem > bestMem) { bestMem = mem; best = i; }
+        }
+    }
+    if (gpuIndex < 0 || gpuIndex >= (int)m_gpuNames.size()) gpuIndex = best;
     setSelectedGpu(gpuIndex);
     LOGF("DXGI: адаптеров %d, выбран %d, VRAM total %.0f MB",
          (int)m_gpuNames.size(), m_selectedGpu, m_vramTotalMB);

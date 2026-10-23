@@ -22,6 +22,7 @@ public:
 
     Overlay* m_parent = nullptr;
     HWND     m_hwnd   = nullptr;
+    bool     m_pendingShow = false;
 
     struct Impl;
     Impl* m_impl = nullptr;
