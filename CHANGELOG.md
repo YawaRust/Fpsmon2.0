@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.0.3 — 2026-10-23
+
+### Исправления
+- Merge pull request #6 from YawaRust/arena/e2987b23-fpsmon2-0 ()
+- fix: ignore non-semver release tags ()
+- Merge pull request #5 from YawaRust/arena/c1a5936f-fpsmon2-0 ()
+- fix: improve settings panel and live sensor selection ()
+
+**Полный список изменений**: https://github.com/YawaRust/Fpsmon2.0/compare/v0.0.2...v0.0.3
+
 ## v0.0.2 — 2026-10-23
 
 ### Исправления
