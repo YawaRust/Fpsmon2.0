@@ -135,6 +135,8 @@ bool ConfigPanelWeb::create(HWND parentHwnd) {
                                                     std::string cm = wideToUtf8(buf);
                                                     s.captureAllow = (cm == "allow");
                                                 }
+                                                if (jsonDouble(json, L"gpuIndex", v))
+                                                    s.gpuIndex = (int)v;
                                                 self->m_parent->applySettings(false);
                                             }
                                             CoTaskMemFree(json);
@@ -187,14 +189,10 @@ void ConfigPanelWeb::show(bool v) {
             m_impl->controller->put_Bounds(r);
         }
     }
+    ShowWindow(m_hwnd, v ? SW_SHOWNOACTIVATE : SW_HIDE);
     if (v) {
-        if (m_impl && m_impl->ready) {
-            ShowWindow(m_hwnd, SW_SHOW);
-        } else {
-            m_pendingShow = true;
-        }
-    } else {
-        ShowWindow(m_hwnd, SW_HIDE);
+        SetForegroundWindow(m_hwnd);
+        if (m_impl && m_impl->controller) m_impl->controller->MoveFocus(COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC);
     }
 }
 
@@ -202,13 +200,27 @@ bool ConfigPanelWeb::isReady() const { return m_impl && m_impl->ready; }
 
 void ConfigPanelWeb::sendSettings(const Settings& s) {
     if (!m_impl || !m_impl->webview || !m_impl->ready) return;
-    wchar_t json[4096];
+    std::wstring gpuNames = L"[";
+    const auto& adapters = m_parent->monitor().gpuNames();
+    for (size_t i = 0; i < adapters.size(); ++i) {
+        if (i) gpuNames += L",";
+        gpuNames += L"\"";
+        for (wchar_t ch : adapters[i]) {
+            if (ch == L'\\' || ch == L'\"') gpuNames += L'\\';
+            gpuNames += ch;
+        }
+        gpuNames += L"\"";
+    }
+    gpuNames += L"]";
+
+    wchar_t json[8192];
     swprintf_s(json,
         L"{\"type\":\"settings\",\"fontSize\":%.0f,\"opacity\":%.2f,\"bgOpacity\":%.2f,"
         L"\"padding\":%d,\"rowGap\":%d,\"blockGap\":%d,"
         L"\"showBorder\":%s,\"rounded\":%s,\"fontBold\":%s,"
         L"\"direction\":%d,\"theme\":\"%S\","
-        L"\"clickThrough\":%s,\"alwaysOnTop\":%s,\"captureAllow\":%s}",
+        L"\"clickThrough\":%s,\"alwaysOnTop\":%s,\"captureAllow\":%s,"
+        L"\"gpuIndex\":%d,\"gpuNames\":%s}",
         s.fontSize, s.opacity, s.bgOpacity,
         s.padding, s.rowGap, s.blockGap,
         s.showBorder ? L"true" : L"false",
@@ -217,7 +229,8 @@ void ConfigPanelWeb::sendSettings(const Settings& s) {
         s.direction, s.theme.c_str(),
         s.clickThrough ? L"true" : L"false",
         s.alwaysOnTop ? L"true" : L"false",
-        s.captureAllow ? L"true" : L"false");
+        s.captureAllow ? L"true" : L"false",
+        s.gpuIndex, gpuNames.c_str());
     m_impl->webview->PostWebMessageAsJson(json);
 }
 

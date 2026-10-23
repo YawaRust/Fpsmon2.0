@@ -536,6 +536,25 @@ export default function ConfigPanel({
         {/* ---------- СИСТЕМА ---------- */}
         {tab === 'system' && (
           <div>
+            {s.gpuNames.length > 0 && (
+              <section className="mb-2 rounded-lg border border-neon/20 bg-neon/[0.04] p-2">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="font-mono text-[9px] tracking-[0.18em] text-slate-500">АКТИВНЫЙ GPU</span>
+                  <span className="rounded border border-neon/20 px-1 py-0.5 font-mono text-[8px] text-neon">{s.gpuNames.length} обнаружено</span>
+                </div>
+                <select value={Math.min(s.gpuIndex, s.gpuNames.length - 1)}
+                  onChange={(e) => patch({ gpuIndex: Number(e.target.value) })}
+                  className="w-full rounded-md border border-white/12 bg-[#0b1118] px-2 py-2 font-mono text-[10px] text-slate-100 outline-none focus:border-neon/60">
+                  {s.gpuNames.map((name, index) => (
+                    <option key={`${name}-${index}`} value={index}>{name}</option>
+                  ))}
+                </select>
+                <p className="mt-1.5 font-mono text-[8px] leading-relaxed text-slate-600">
+                  Выбранный адаптер используется для показателей загрузки и видеопамяти.
+                </p>
+              </section>
+            )}
+
             {/* захват OBS */}
             <div className="mb-1.5 font-mono text-[9px] tracking-[0.2em] text-slate-500">ЗАХВАТ СТОРОННИМИ ПРОГРАММАМИ</div>
             <div className="grid grid-cols-2 gap-1.5">

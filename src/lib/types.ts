@@ -173,6 +173,9 @@ export type TitleStyle = 'plain' | 'chip' | 'bar';
 export type CaptureMode = 'exclude' | 'allow';
 
 export interface OverlaySettings {
+  gpuIndex: number;
+  gpuNames: string[];
+
   /* позиция */
   position: OverlayPos;
   customX: number;
@@ -304,6 +307,8 @@ export function defaultHotkeys(): Record<HotkeyAction, Hotkey> {
 
 export function defaultSettings(): OverlaySettings {
   return {
+    gpuIndex: 0,
+    gpuNames: [],
     position: 'tl',
     customX: 14,
     customY: 14,

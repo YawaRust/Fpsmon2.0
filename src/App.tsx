@@ -98,7 +98,9 @@ export default function App() {
   const [bootPhase, setBootPhase] = useState<'boot' | 'fade' | 'done'>('boot');
   
   // Режим "Встроенного конфига" для WebView2
-  const isNativeHost = !!window.chrome?.webview;
+  // `?native-preview` displays the same embedded React surface compiled into the Windows EXE.
+  // The native runtime branch remains selected automatically inside WebView2.
+  const isNativeHost = !!window.chrome?.webview || import.meta.env.DEV || new URLSearchParams(window.location.search).has('native-preview');
 
   useEffect(() => {
     const t1 = setTimeout(() => setBootPhase('fade'), 1450);
