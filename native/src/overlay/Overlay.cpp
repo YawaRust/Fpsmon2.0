@@ -1,6 +1,8 @@
 #include "Overlay.h"
-#include "ConfigPanelWeb.h"
 #include "../utils/Logger.h"
+
+void drawConfigUI(Overlay& o);
+void scrollConfig(int delta);
 
 void (*g_trayMsgHandler)(int) = nullptr;
 
@@ -13,11 +15,6 @@ static int dpiOf(HWND hwnd) {
     int d = dc ? GetDeviceCaps(dc, LOGPIXELSY) : 96;
     if (dc) ReleaseDC(hwnd, dc);
     return d > 0 ? d : 96;
-}
-
-static void fmtValue(char* out, size_t n, float v, int dec) {
-    if (v >= 10000.f) sprintf_s(out, n, "%.0f", v);
-    else              sprintf_s(out, n, "%.*f", dec, v);
 }
 
 void Overlay::recreateFonts(const wchar_t* family, float sz, bool boldTheme) {
@@ -100,7 +97,6 @@ bool Overlay::create() {
 }
 
 void Overlay::destroy() {
-    if (m_configWeb) delete m_configWeb;
     if (m_hwnd) DestroyWindow(m_hwnd);
     if (m_rt) m_rt->Release();
     if (m_dw) m_dw->Release();
@@ -122,6 +118,11 @@ bool Overlay::ensureTarget(int w, int h) {
 }
 
 float Overlay::measure(int& outW, int& outH) {
+    if (m_configOpen) {
+        outW = 346;
+        outH = 620;
+        return (float)outW;
+    }
     float f = m_set.fontSize, lineH = f * 1.22f + m_set.rowGap, wMax = 0, h = (float)m_set.padding;
     for (const auto& b : m_set.blocks) {
         if (!b.enabled || b.items.empty()) continue;
@@ -130,9 +131,13 @@ float Overlay::measure(int& outW, int& outH) {
         if (b.showTitle && !b.title.empty()) by += f * 0.72f + 2;
         float cw = 0; bool first = true;
         for (const auto& it : b.items) {
+            const SensorInfo& info = sensorInfo(it.sensor);
+            if (!info.available) continue;
             float iw = 0;
-            if (it.showLabel && !it.label.empty()) iw += textW(it.label.c_str(), f, false) + f * 0.5f;
-            iw += textW(L"999.9", it.big ? f * 1.42f : f * 0.98f, true);
+            if (it.showLabel && !it.label.empty()) iw += textW(it.label.c_str(), f * 0.72f, false) + 5;
+            const wchar_t* sample = info.decimals ? L"999.9" : L"999";
+            iw += textW(sample, it.big ? f * 1.42f : f, true);
+            if (it.showUnit && info.unit[0]) iw += textW(utf8ToWide(info.unit).c_str(), f * 0.72f, false) + 3;
             if (!it.sameLine || first) { if (!first) by += lineH; cw = iw; first = false; } else cw += f * 0.62f + iw;
             if (cw > bw) bw = cw;
         }
@@ -147,6 +152,16 @@ SIZE Overlay::positionFor(int w, int h) {
     int sw = GetSystemMetrics(SM_CXSCREEN);
     int sh = GetSystemMetrics(SM_CYSCREEN);
     SIZE p{};
+    if (m_configOpen) {
+        p.cx = m_set.position == 1 || m_set.position == 3 ? sw - w - 14 : 14;
+        p.cy = m_set.position == 2 || m_set.position == 3 ? sh - h - 48 : 14;
+        if (m_set.position == 4) { p.cx = m_set.customX; p.cy = m_set.customY; }
+        int x = (std::min)((int)p.cx, sw - w);
+        int y = (std::min)((int)p.cy, sh - h);
+        p.cx = (std::max)(0, x);
+        p.cy = (std::max)(0, y);
+        return p;
+    }
     switch (m_set.position) {
     case 1: p.cx = sw - w - 14; p.cy = 14; break;
     case 2: p.cx = 14; p.cy = sh - h - 48; break;
@@ -158,6 +173,7 @@ SIZE Overlay::positionFor(int w, int h) {
 }
 
 void Overlay::draw() {
+    if (!m_visible && !m_configOpen) { ShowWindow(m_hwnd, SW_HIDE); return; }
     int bw, bh; measure(bw, bh);
     ensureTarget(bw, bh);
     RECT rc = { 0, 0, bw, bh };
@@ -165,6 +181,9 @@ void Overlay::draw() {
     m_rt->BeginDraw();
     m_rt->Clear(D2D1::ColorF(0, 0, 0, 0));
 
+    if (m_configOpen) {
+        drawConfigUI(*this);
+    } else {
     ID2D1SolidColorBrush* bgBr;
     m_rt->CreateSolidColorBrush(toColorF(m_theme.bg, m_set.bgOpacity), &bgBr);
     D2D1_ROUNDED_RECT rr = { D2D1::RectF(0, 0, (float)bw, (float)bh), (float)m_set.cornerRadius, (float)m_set.cornerRadius };
@@ -178,19 +197,33 @@ void Overlay::draw() {
         if (b.showTitle) { text(m_set.padding, y, b.title.c_str(), m_theme.label, m_set.fontSize * 0.7f, true); y += m_set.fontSize; }
         bool first = true; float cx = (float)m_set.padding;
         for (const auto& it : b.items) {
+            const SensorInfo& info = sensorInfo(it.sensor);
+            if (!info.available) continue;
             if (!it.sameLine || first) { if (!first) y += m_set.fontSize * 1.2f; cx = (float)m_set.padding; first = false; }
-            wchar_t val[32]; swprintf_s(val, L"%.1f", m_mon.value(it.sensor));
+            if (it.showLabel && !it.label.empty()) {
+                text(cx, y, it.label.c_str(), m_theme.label, m_set.fontSize * 0.72f);
+                cx += textW(it.label.c_str(), m_set.fontSize * 0.72f) + 5;
+            }
+            wchar_t val[32];
+            swprintf_s(val, L"%.*f", info.decimals, m_mon.value(it.sensor));
             text(cx, y, val, m_theme.palette[b.hw], m_set.fontSize, it.big);
-            cx += textW(val, m_set.fontSize, it.big) + 10;
+            cx += textW(val, m_set.fontSize, it.big);
+            if (it.showUnit && info.unit[0]) {
+                std::wstring unit = utf8ToWide(info.unit);
+                text(cx + 3, y, unit.c_str(), m_theme.label, m_set.fontSize * 0.72f);
+                cx += textW(unit.c_str(), m_set.fontSize * 0.72f) + 8;
+            } else cx += 8;
         }
         y += m_set.fontSize * 1.2f + m_set.blockGap;
+    }
     }
 
     m_rt->EndDraw();
     SIZE pos = positionFor(bw, bh);
     SetWindowPos(m_hwnd, HWND_TOPMOST, pos.cx, pos.cy, bw, bh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     HDC sc = GetDC(nullptr); POINT ps = { 0, 0 }, pd = { pos.cx, pos.cy }; SIZE sz = { bw, bh };
-    BLENDFUNCTION bf = { AC_SRC_OVER, 0, (BYTE)(m_set.opacity * 255), AC_SRC_ALPHA };
+    BYTE alpha = m_configOpen ? 255 : (BYTE)(m_set.opacity * 255);
+    BLENDFUNCTION bf = { AC_SRC_OVER, 0, alpha, AC_SRC_ALPHA };
     UpdateLayeredWindow(m_hwnd, sc, &pd, &sz, m_memDC, &ps, 0, &bf, ULW_ALPHA);
     ReleaseDC(nullptr, sc);
 }
@@ -198,19 +231,26 @@ void Overlay::draw() {
 void Overlay::poll(float dt) { m_mon.pollFast(); static int sa = 0; sa += 16; if (sa >= m_set.updateIntervalMs) { sa = 0; m_mon.pollSys(); } draw(); }
 void Overlay::repaint() { m_dirty = true; }
 
-void Overlay::toggleVisible() { m_visible = !m_visible; ShowWindow(m_hwnd, m_visible ? SW_SHOWNOACTIVATE : SW_HIDE); }
+void Overlay::toggleVisible() {
+    m_visible = !m_visible;
+    if (!m_configOpen) ShowWindow(m_hwnd, m_visible ? SW_SHOWNOACTIVATE : SW_HIDE);
+}
 
 void Overlay::toggleConfig() {
-    m_configOpen = !m_configOpen;
-    if (m_configOpen) {
-        if (!m_configWeb) { m_configWeb = new ConfigPanelWeb(this); m_configWeb->create(m_hwnd); }
-        m_configWeb->show(true);
+    if (!m_configOpen) {
+        m_configRestoreVisible = m_visible;
+        m_configOpen = true;
     } else {
-        if (m_configWeb) { m_configWeb->show(false); }
+        m_configOpen = false;
+        m_visible = m_configRestoreVisible;
         m_set.save();
         hotkeysDirty = true;
-        applySettings(false);
     }
+    m_cfgPanelX = 0;
+    applyClickThrough();
+    if (m_configOpen) ShowWindow(m_hwnd, SW_SHOWNOACTIVATE);
+    else if (!m_visible) ShowWindow(m_hwnd, SW_HIDE);
+    m_dirty = true;
 }
 
 void Overlay::applyCapture() {
@@ -234,8 +274,6 @@ void Overlay::applySettings(bool rereadPos) {
     applyClickThrough();
     applyCapture();
     if (m_mon.selectedGpu() != m_set.gpuIndex) m_mon.setSelectedGpu(m_set.gpuIndex);
-    // Синхронизируем WebView2 при изменении настроек из C++
-    if (m_configWeb && m_configWeb->isReady()) m_configWeb->sendSettings(m_set);
     if (rereadPos) m_dirty = true;
 }
 
@@ -271,10 +309,18 @@ LRESULT CALLBACK Overlay::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
         return 0;
     }
     if (m == WM_HOTKEY) { if (wp == 101) o->toggleConfig(); if (wp == 100) o->toggleVisible(); return 0; }
-    if (m == WM_LBUTTONDOWN) { o->m_drag = true; SetCapture(h); GetCursorPos(&o->m_dragStart); return 0; }
+    if (m == WM_MOUSEWHEEL && o->m_configOpen) { scrollConfig(GET_WHEEL_DELTA_WPARAM(wp)); return 0; }
+    if (m == WM_LBUTTONDOWN) {
+        o->m_lmbDown = true;
+        SetCapture(h);
+        if (!o->m_configOpen) { o->m_drag = true; GetCursorPos(&o->m_dragStart); }
+        return 0;
+    }
     if (m == WM_LBUTTONUP) {
-        o->m_drag = false; ReleaseCapture();
-        o->settings().save();
+        o->m_lmbDown = false;
+        o->m_drag = false;
+        ReleaseCapture();
+        if (!o->m_configOpen) o->settings().save();
         return 0;
     }
     if (m == WM_MOUSEMOVE && o->m_drag) {

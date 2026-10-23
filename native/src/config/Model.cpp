@@ -5,7 +5,7 @@
 
 static const SensorInfo SENSORS[SENSOR_COUNT] = {
     /* key            name      unit      hw low dec avail  note */
-    { "FPS",        "FPS",     "",     0, true,  0, true,  nullptr },
+    { "FPS",        "DWM FPS", "",     0, true,  0, true,  nullptr },
     { "Frametime",  "FT",      "ms",   0, false, 1, true,  nullptr },
     { "FPSAvg",     "AVG",     "",     0, true,  0, true,  nullptr },
     { "FPS1Low",    "1%",      "",     0, true,  0, true,  nullptr },
@@ -15,13 +15,13 @@ static const SensorInfo SENSORS[SENSOR_COUNT] = {
     { "Latency",    "LAT",     "ms",   0, false, 0, false, "нужен NVAPI/PCL (v0.1)" },
 
     { "CPUUsage",   "LOAD",    "%",    1, false, 0, true,  nullptr },
-    { "CPUTemp",    "TEMP",    "\xC2\xB0""C",  1, false, 0, true,  nullptr },
+    { "CPUTemp",    "TEMP",    "\xC2\xB0""C",  1, false, 0, false, "нет достоверного датчика без vendor/HW provider" },
     { "CPUClock",   "CLK",     "MHz",  1, false, 0, true,  nullptr },
     { "CPUPower",   "PWR",     "W",    1, false, 0, false, "нужен Intel RAPL / AMD SMU" },
     { "CPUFan",     "FAN",     "RPM",  1, false, 0, false, "нужен драйвер EC" },
 
     { "GPUUsage",   "LOAD",    "%",    2, false, 0, true,  nullptr },
-    { "GPUTemp",    "TEMP",    "\xC2\xB0""C",  2, false, 0, true,  nullptr },
+    { "GPUTemp",    "TEMP",    "\xC2\xB0""C",  2, false, 0, false, "требуется NVAPI/ADL" },
     { "GPUClock",   "CLK",     "MHz",  2, false, 0, false, "нужен NVAPI / ADL" },
     { "GPUPower",   "PWR",     "W",    2, false, 0, false, "нужен NVAPI / ADL" },
     { "GPUFan",     "FAN",     "RPM",  2, false, 0, false, "нужен NVAPI / ADL" },
@@ -148,7 +148,7 @@ static ItemCfg mk(SensorId s, const char* label, bool showLabel = true,
 void Settings::setDefaults() {
     blocks.clear();
 
-    BlockCfg fps; fps.hw = 0; fps.title = L"FPS"; fps.showTitle = true;
+    BlockCfg fps; fps.hw = 0; fps.title = L"DWM FPS"; fps.showTitle = true;
     fps.items.push_back(mk(SensorId::FPS, "", false, false, true, true));
     fps.items.push_back(mk(SensorId::FPS1Low, "1%", true, true));
     blocks.push_back(fps);

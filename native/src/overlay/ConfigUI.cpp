@@ -7,6 +7,11 @@ static bool gDn, gDnP;
 static int  gScroll;
 static int  gHkListen = -1;
 
+void scrollConfig(int delta) {
+    gScroll -= delta / WHEEL_DELTA * 30;
+    if (gScroll < 0) gScroll = 0;
+}
+
 static void uiInput(Overlay& o) {
     POINT pt; GetCursorPos(&pt);
     RECT wr; GetWindowRect(o.hwnd(), &wr);
@@ -106,7 +111,7 @@ void drawConfigUI(Overlay& o) {
         bool on=(o.m_cfgTab==i);float bx=PX+i*tw;
         if(on)F(o,bx,PY+38,tw,28,C_AC,0.08f);
         if(HIT(bx,PY+38,tw,28)&&!on)F(o,bx,PY+38,tw,28,0xFFFFFF,0.04f);
-        if(HIT(bx,PY+38,tw,28)&&!gDn&&gDnP)o.m_cfgTab=i;
+        if(HIT(bx,PY+38,tw,28)&&!gDn&&gDnP){o.m_cfgTab=i;gScroll=0;}
         if(on)F(o,bx,PY+64,tw,2,C_AC,0.90f);
         float lw=TW(o,TABS[i],8.5f);
         T(o,bx+(tw-lw)*.5f,PY+46,TABS[i],on?C_AC:C_DIM,8.5f,false,on?1.f:0.9f);
@@ -122,7 +127,7 @@ void drawConfigUI(Overlay& o) {
         static const wchar_t*HW_W[]={L"FPS",L"CPU",L"GPU",L"RAM",L"I/O"};
         static uint32_t HW_C[]={0x22FF66,0x4DB3FF,0xB9A7FF,0xFFCC4D,0x6EF3D6};
         for(size_t bi=0;bi<s.blocks.size();bi++){
-            const BlockCfg&b=s.blocks[bi];int hw=b.hw<0?0:(b.hw>4?4:b.hw);float bh=50;
+            BlockCfg&b=s.blocks[bi];int hw=b.hw<0?0:(b.hw>4?4:b.hw);float bh=50;
             F(o,lx,cy,cw,bh,C_CARD,0.25f,8.f);
             S(o,lx,cy,cw,bh,b.enabled?C_AC:C_BORDER,b.enabled?0.30f:0.12f,8.f);
             F(o,lx+10,cy+10,22,22,HW_C[hw],0.12f,6.f);
@@ -132,10 +137,23 @@ void drawConfigUI(Overlay& o) {
             wchar_t cnt[32];swprintf_s(cnt,L"%d датч.",(int)b.items.size());
             T(o,lx+38,cy+24,cnt,C_DIM,8.5f,false,0.9f);
             F(o,lx+cw-14,cy+bh*.5f-4,8,8,b.enabled?C_AC:C_DIM,b.enabled?0.8f:0.3f,4.f);
+            if(HIT(lx,cy,cw,bh)&&!gDn&&gDnP){b.enabled=!b.enabled;o.markDirty();}
             cy+=bh+8;
         }
         S(o,lx,cy,cw,32,C_BORDER,0.15f,8.f);
         T(o,lx+cw*.5f-40,cy+10,L"+ добавить блок",C_DIM2,10.f);
+        if(HIT(lx,cy,cw,32)&&!gDn&&gDnP&&s.blocks.size()<16){
+            static const int sensors[]={
+                (int)SensorId::FPS,(int)SensorId::CPUUsage,(int)SensorId::GPUUsage,
+                (int)SensorId::RAMUsage,(int)SensorId::DiskRead
+            };
+            static const wchar_t*titles[]={L"FPS",L"CPU",L"GPU",L"RAM",L"I/O"};
+            int hw=(int)(s.blocks.size()%5);
+            BlockCfg b;b.hw=hw;b.title=titles[hw];
+            ItemCfg it{};it.sensor=(SensorId)sensors[hw];
+            it.label=utf8ToWide(sensorInfo(it.sensor).name);it.showLabel=true;it.showUnit=true;
+            b.items.push_back(it);s.blocks.push_back(b);o.markDirty();
+        }
     }
 
     // TAB 1: THEMES
@@ -208,6 +226,8 @@ void drawConfigUI(Overlay& o) {
 
     // TAB 4: SYSTEM
     else if(o.m_cfgTab==4){
+        T(o,lx,cy,L"FPS сейчас берётся из DWM, не из игры",0xFFD23F,8.5f,false,0.95f);cy+=16;
+        T(o,lx,cy,L"Температуры скрыты: нет точного sensor provider",C_DIM,8.f,false,0.9f);cy+=20;
         T(o,lx,cy,L"ЗАХВАТ (OBS)",C_DIM,8.5f,false,0.9f);cy+=18;
         float bw5=(cw-8)*.5f;
         if(BTN(o,lx,cy,bw5,28,L"РАЗРЕШЁН",s.captureAllow)){s.captureAllow=true;o.applyCapture();}
