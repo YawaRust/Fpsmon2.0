@@ -93,7 +93,7 @@ else()
 endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    d2d1 dwrite dxgi pdh dwmapi
+    d2d1 dwrite dxgi pdh dwmapi powrprof
     advapi32 user32 gdi32 shell32 ole32 version.lib
 )
 

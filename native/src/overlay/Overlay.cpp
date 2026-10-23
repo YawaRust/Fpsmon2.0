@@ -72,7 +72,7 @@ float Overlay::textW(const wchar_t* s, float size, bool bold) {
 bool Overlay::create() {
     m_set.load();
     m_theme = m_set.themeDef();
-    m_mon.init();
+    m_mon.init(m_set.gpuIndex);
 
     D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &m_factory);
     D2D1_RENDER_TARGET_PROPERTIES rtp = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
@@ -229,6 +229,7 @@ void Overlay::applySettings(bool rereadPos) {
     m_fontCacheSize = -1.f;
     applyClickThrough();
     applyCapture();
+    if (m_mon.selectedGpu() != m_set.gpuIndex) m_mon.setSelectedGpu(m_set.gpuIndex);
     // Синхронизируем WebView2 при изменении настроек из C++
     if (m_configWeb && m_configWeb->isReady()) m_configWeb->sendSettings(m_set);
     if (rereadPos) m_dirty = true;

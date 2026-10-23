@@ -1,5 +1,6 @@
 #include "Sensors.h"
 #include "../utils/Logger.h"
+#include <powrprof.h>
 
 static uint64_t fileTime64(const FILETIME& ft) {
     return ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
@@ -32,6 +33,36 @@ double SystemMonitor::pdhMaxArray(PDH_HCOUNTER c) {
     return mx;
 }
 
+double SystemMonitor::pdhMaxArrayFiltered(PDH_HCOUNTER c, const std::string& filter) {
+    if (!c) return 0.0;
+    DWORD size = 0, count = 0;
+    if (PdhGetFormattedCounterArrayA(c, PDH_FMT_DOUBLE, &size, &count, nullptr)
+        != PDH_MORE_DATA || size == 0)
+        return 0.0;
+    std::vector<BYTE> buf(size);
+    auto* arr = (PDH_FMT_COUNTERVALUE_ITEM_A*)buf.data();
+    if (PdhGetFormattedCounterArrayA(c, PDH_FMT_DOUBLE, &size, &count, arr) != ERROR_SUCCESS)
+        return 0.0;
+    double mx = 0.0;
+    bool any = false;
+    for (DWORD i = 0; i < count; i++) {
+        if (arr[i].FmtValue.CStatus != ERROR_SUCCESS) continue;
+        std::string name = arr[i].szName ? arr[i].szName : "";
+        if (!filter.empty() && name.find(filter) == std::string::npos) continue;
+        any = true;
+        if (arr[i].FmtValue.doubleValue > mx) mx = arr[i].FmtValue.doubleValue;
+    }
+    if (!any && !filter.empty()) {
+        // fallback: если фильтр не совпал — берём максимум по всем
+        for (DWORD i = 0; i < count; i++) {
+            if (arr[i].FmtValue.CStatus == ERROR_SUCCESS &&
+                arr[i].FmtValue.doubleValue > mx)
+                mx = arr[i].FmtValue.doubleValue;
+        }
+    }
+    return mx;
+}
+
 double SystemMonitor::pdhSumArray(PDH_HCOUNTER c) {
     if (!c) return 0.0;
     DWORD size = 0, count = 0;
@@ -51,27 +82,35 @@ double SystemMonitor::pdhSumArray(PDH_HCOUNTER c) {
 
 /* ---------- init ---------- */
 
-bool SystemMonitor::init() {
+bool SystemMonitor::init(int gpuIndex) {
     QueryPerformanceFrequency(&m_freq);
     GetSystemTimes(&m_prevIdle, &m_prevKernel, &m_prevUser);
 
-    // DXGI 1.4 → VRAM
+    // DXGI 1.4 → перечисление адаптеров (GPU)
     IDXGIFactory1* fac1 = nullptr;
     if (SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&fac1)))) {
         m_factory = fac1;
-        IDXGIAdapter1* ad = nullptr;
-        if (SUCCEEDED(fac1->EnumAdapters1(0, &ad))) {
-            IDXGIAdapter3* a3 = nullptr;
-            if (SUCCEEDED(ad->QueryInterface(IID_PPV_ARGS(&a3)))) {
-                m_adapter3 = a3;
-                DXGI_ADAPTER_DESC1 desc{};
-                if (SUCCEEDED(ad->GetDesc1(&desc)))
-                    m_vramTotalMB = (float)(desc.DedicatedVideoMemory / (1024 * 1024));
+        for (UINT i = 0; ; i++) {
+            IDXGIAdapter1* ad = nullptr;
+            if (FAILED(fac1->EnumAdapters1(i, &ad))) break;
+            m_adapters.push_back(ad);
+            DXGI_ADAPTER_DESC1 desc{};
+            if (SUCCEEDED(ad->GetDesc1(&desc))) {
+                m_gpuNames.push_back(desc.Description);
+                m_gpuLuids.push_back(desc.AdapterLuid);
+            } else {
+                m_gpuNames.push_back(L"GPU");
+                LUID z{}; m_gpuLuids.push_back(z);
             }
-            ad->Release();
         }
     }
-    LOGF("DXGI: адаптер %s, VRAM total %.0f MB", m_adapter3 ? "OK" : "нет", m_vramTotalMB);
+    if (m_gpuNames.empty()) {
+        m_gpuNames.push_back(L"GPU");
+        LUID z{}; m_gpuLuids.push_back(z);
+    }
+    setSelectedGpu(gpuIndex);
+    LOGF("DXGI: адаптеров %d, выбран %d, VRAM total %.0f MB",
+         (int)m_gpuNames.size(), m_selectedGpu, m_vramTotalMB);
 
     // PDH
     if (PdhOpenQueryA(nullptr, 0, &m_q) != ERROR_SUCCESS) {
@@ -84,7 +123,8 @@ bool SystemMonitor::init() {
         PdhAddEnglishCounterA(m_q, "\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_cDiskT);
         PdhAddEnglishCounterA(m_q, "\\Network Interface(*)\\Bytes Sent/sec", 0, &m_cNetS);
         PdhAddEnglishCounterA(m_q, "\\Network Interface(*)\\Bytes Received/sec", 0, &m_cNetR);
-        PdhAddEnglishCounterA(m_q, "\\Thermal Zone Information(*)\\Temperature", 0, &m_cThermal);
+        if (PdhAddEnglishCounterA(m_q, "\\Thermal Zone Information(*)\\Temperature", 0, &m_cThermal) == ERROR_SUCCESS)
+            m_hasTemp = true;
 
         PdhCollectQueryData(m_q);
         m_pdhReady = true;
@@ -101,7 +141,36 @@ bool SystemMonitor::init() {
 void SystemMonitor::shutdown() {
     if (m_q) { PdhCloseQuery(m_q); m_q = nullptr; }
     if (m_adapter3) { m_adapter3->Release(); m_adapter3 = nullptr; }
+    for (auto* a : m_adapters) if (a) a->Release();
+    m_adapters.clear();
+    m_gpuNames.clear();
+    m_gpuLuids.clear();
     if (m_factory) { m_factory->Release(); m_factory = nullptr; }
+}
+
+
+void SystemMonitor::setSelectedGpu(int idx) {
+    if (m_gpuNames.empty()) return;
+    if (idx < 0 || idx >= (int)m_gpuNames.size()) idx = 0;
+    m_selectedGpu = idx;
+    if (m_adapter3) { m_adapter3->Release(); m_adapter3 = nullptr; }
+    m_vramTotalMB = 0.f;
+    if (idx < (int)m_adapters.size() && m_adapters[idx]) {
+        IDXGIAdapter3* a3 = nullptr;
+        if (SUCCEEDED(m_adapters[idx]->QueryInterface(IID_PPV_ARGS(&a3)))) {
+            m_adapter3 = a3;
+            DXGI_ADAPTER_DESC1 desc{};
+            if (SUCCEEDED(m_adapters[idx]->GetDesc1(&desc))) {
+                m_vramTotalMB = (float)(desc.DedicatedVideoMemory / (1024 * 1024));
+                char buf[64];
+                sprintf_s(buf, "luid_0x%08x_0x%08x",
+                          desc.AdapterLuid.LowPart, desc.AdapterLuid.HighPart);
+                m_gpuFilter = buf;
+            }
+        }
+    }
+    if (m_vramTotalMB > 0)
+        m_v[(int)SensorId::VRAMPct] = 0;
 }
 
 /* ---------- кадры (DWM) ---------- */
@@ -186,15 +255,28 @@ void SystemMonitor::pollSys() {
         m_prevIdle = idle; m_prevKernel = kernel; m_prevUser = user;
     }
 
-    // ── CPU clock (~MHz из HAL) ──
-    HKEY hKey;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
-        "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
-        0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        DWORD mhz = 0, sz = sizeof(mhz);
-        if (RegQueryValueExA(hKey, "~MHz", nullptr, nullptr, (LPBYTE)&mhz, &sz) == ERROR_SUCCESS)
-            m_v[(int)SensorId::CPUClock] = (float)mhz;
-        RegCloseKey(hKey);
+    // ── CPU clock (текущая частота с бустом, как в Диспетчере задач) ──
+    {
+        SYSTEM_INFO si{}; GetSystemInfo(&si);
+        DWORD n = si.dwNumberOfProcessors > 0 ? si.dwNumberOfProcessors : 1;
+        std::vector<PROCESSOR_POWER_INFORMATION> info(n);
+        if (CallNtPowerInformation(ProcessorInformation, nullptr, 0,
+                info.data(), (ULONG)(n * sizeof(PROCESSOR_POWER_INFORMATION))) == 0) {
+            DWORD mx = 0;
+            for (DWORD i = 0; i < n; i++)
+                if (info[i].CurrentMhz > mx) mx = info[i].CurrentMhz;
+            if (mx > 0) m_v[(int)SensorId::CPUClock] = (float)mx;
+        } else {
+            HKEY hKey;
+            if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
+                "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",
+                0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+                DWORD mhz = 0, sz = sizeof(mhz);
+                if (RegQueryValueExA(hKey, "~MHz", nullptr, nullptr, (LPBYTE)&mhz, &sz) == ERROR_SUCCESS)
+                    m_v[(int)SensorId::CPUClock] = (float)mhz;
+                RegCloseKey(hKey);
+            }
+        }
     }
 
     // ── RAM ──
@@ -221,7 +303,7 @@ void SystemMonitor::pollSys() {
     // ── PDH ──
     if (m_pdhReady) {
         PdhCollectQueryData(m_q);
-        m_v[(int)SensorId::GPUUsage] = (float)pdhMaxArray(m_cGpu);
+        m_v[(int)SensorId::GPUUsage] = (float)pdhMaxArrayFiltered(m_cGpu, m_gpuFilter);
         m_v[(int)SensorId::DiskRead] = (float)(pdhScalar(m_cDiskR) / (1024.0 * 1024.0));
         m_v[(int)SensorId::DiskWrite] = (float)(pdhScalar(m_cDiskW) / (1024.0 * 1024.0));
         double dt = pdhScalar(m_cDiskT);
