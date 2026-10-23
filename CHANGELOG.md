@@ -3,6 +3,27 @@
 ## v0.0.1 — 2026-10-23
 
 ### Исправления
+- Merge pull request #3 from YawaRust/arena/adcba088-fpsmon2-0 ()
+- fix: define WM_TRAYICON in Overlay.cpp ()
+- fix: tray actions, settings panel rendering, gpu selection, versioning ()
+- Merge pull request #2 from YawaRust/arena/83ccaa60-fpsmon2-0 ()
+- fix: proper semver versioning from conventional commits ()
+- fix: apply web settings in native panel and enable overlay dragging ()
+- Merge pull request #1 from YawaRust/arena/ff1b7f56-fpsmon2-0 ()
+- fix: define CPU power info struct for CallNtPowerInformation ()
+- fix: make MSVC optimization flags Release-only ()
+- fix: add prebuilt app.ico to avoid CMake HEX_DECODE failure ()
+- fix: correct YAML indentation for embedded UI here-strings ()
+- fix: repair CI embedding and native sensor/GPU handling ()
+
+### Прочее
+- Add files via upload ()
+- Fix_2 ()
+
+
+## v0.0.1 — 2026-10-23
+
+### Исправления
 - Merge pull request #2 from YawaRust/arena/83ccaa60-fpsmon2-0 ()
 - fix: proper semver versioning from conventional commits ()
 - fix: apply web settings in native panel and enable overlay dragging ()
