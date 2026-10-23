@@ -57,7 +57,15 @@ jobs:
 
       - name: Конфигурация
         shell: pwsh
-        run: cmake -B build -S native -G Ninja "-DCMAKE_BUILD_TYPE=${{ matrix.config }}" "-DWEBVIEW2_ROOT=$env:WV2_ROOT"
+        run: |
+          $out = cmake -B build -S native -G Ninja "-DCMAKE_BUILD_TYPE=${{ matrix.config }}" "-DWEBVIEW2_ROOT=$env:WV2_ROOT" 2>&1
+          $out | ForEach-Object { Write-Host $_ }
+          if ($LASTEXITCODE -ne 0) {
+            $msg = ($out -join ' ')
+            if ($msg.Length -gt 1500) { $msg = $msg.Substring(0,1500) }
+            Write-Host "::error::$msg"
+            exit 1
+          }
 
       - name: Сборка
         shell: pwsh
