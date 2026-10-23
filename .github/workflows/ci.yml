@@ -1,0 +1,84 @@
+name: CI
+
+'on':
+  pull_request:
+    branches: [main, master]
+  push:
+    branches:
+      - '**'
+      - '!main'
+      - '!master'
+
+jobs:
+  build-check:
+    name: Сборка (${{ matrix.config }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Установить WebView2 SDK
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile nuget.exe
+          .\nuget.exe install Microsoft.Web.WebView2 -OutputDirectory wv2 -NonInteractive
+          $pkg = Get-ChildItem -Path wv2 -Filter "Microsoft.Web.WebView2.*" -Directory | Select-Object -First 1
+          echo "WV2_ROOT=$($pkg.FullName)" >> $env:GITHUB_ENV
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Сборка React UI
+        run: |
+          npm install
+          npm run build
+
+      - name: Встроить React UI в C++ header
+        shell: pwsh
+        run: |
+          $html = Get-Content dist/index.html -Raw -Encoding UTF8
+          $content = @"
+#pragma once
+static const char* kEmbeddedUiHtml = R"HTML(
+$html
+)HTML";
+"@
+          Set-Content native/src/overlay/EmbeddedUi.h $content -Encoding UTF8
+
+      - name: Конфигурация
+        shell: pwsh
+        run: cmake -B build -S native -G Ninja "-DCMAKE_BUILD_TYPE=${{ matrix.config }}" "-DWEBVIEW2_ROOT=$env:WV2_ROOT"
+
+      - name: Сборка
+        shell: pwsh
+        run: cmake --build build --parallel
+
+  commit-lint:
+    name: Conventional Commits
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Проверить формат коммитов
+        run: |
+          FAILED=0
+          while read -r MSG; do
+            [ -z "$MSG" ] && continue
+            if ! echo "$MSG" | grep -qE '^(feat|fix|perf|docs|style|refactor|test|chore|ci)(\(.+\))?!?: .+'; then
+              echo "::error::Некорректный формат коммита: $MSG (нужен префикс feat/fix/perf/docs/chore/…)"
+              FAILED=1
+            fi
+          done < <(git log ${{ github.event.pull_request.base.sha }}..HEAD --pretty=format:"%s")
+          exit $FAILED
