@@ -146,6 +146,7 @@ bool SystemMonitor::init(int gpuIndex) {
         PdhAddEnglishCounterA(m_q, "\\Network Interface(*)\\Bytes Received/sec", 0, &m_cNetR);
         if (PdhAddEnglishCounterA(m_q, "\\Thermal Zone Information(*)\\Temperature", 0, &m_cThermal) == ERROR_SUCCESS)
             m_hasTemp = true;
+        PdhAddEnglishCounterA(m_q, "\\Processor Information(_Total)\\Processor Frequency", 0, &m_cCpuFreq);
 
         PdhCollectQueryData(m_q);
         m_pdhReady = true;
@@ -278,16 +279,24 @@ void SystemMonitor::pollSys() {
 
     // ── CPU clock (текущая частота с бустом, как в Диспетчере задач) ──
     {
-        SYSTEM_INFO si{}; GetSystemInfo(&si);
-        DWORD n = si.dwNumberOfProcessors > 0 ? si.dwNumberOfProcessors : 1;
-        std::vector<CpuPowerInfo> info(n);
-        if (CallNtPowerInformation(ProcessorInformation, nullptr, 0,
-                info.data(), (ULONG)(n * sizeof(CpuPowerInfo))) == 0) {
-            DWORD mx = 0;
-            for (DWORD i = 0; i < n; i++)
-                if (info[i].CurrentMhz > mx) mx = info[i].CurrentMhz;
-            if (mx > 0) m_v[(int)SensorId::CPUClock] = (float)mx;
-        } else {
+        if (m_cCpuFreq) {
+            // pollSys collected all PDH counters at function entry; read that sample here.
+            double f = pdhScalar(m_cCpuFreq);
+            if (f > 0) m_v[(int)SensorId::CPUClock] = (float)f;
+        }
+        if (m_v[(int)SensorId::CPUClock] <= 0) {
+            SYSTEM_INFO si{}; GetSystemInfo(&si);
+            DWORD n = si.dwNumberOfProcessors > 0 ? si.dwNumberOfProcessors : 1;
+            std::vector<CpuPowerInfo> info(n);
+            if (CallNtPowerInformation(ProcessorInformation, nullptr, 0,
+                    info.data(), (ULONG)(n * sizeof(CpuPowerInfo))) == 0) {
+                DWORD mx = 0;
+                for (DWORD i = 0; i < n; i++)
+                    if (info[i].CurrentMhz > mx) mx = info[i].CurrentMhz;
+                if (mx > 0) m_v[(int)SensorId::CPUClock] = (float)mx;
+            }
+        }
+        if (m_v[(int)SensorId::CPUClock] <= 0) {
             HKEY hKey;
             if (RegOpenKeyExA(HKEY_LOCAL_MACHINE,
                 "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0",

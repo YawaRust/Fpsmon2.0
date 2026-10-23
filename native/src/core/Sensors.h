@@ -61,6 +61,7 @@ private:
     PDH_HCOUNTER m_cDiskR = nullptr, m_cDiskW = nullptr, m_cDiskT = nullptr;
     PDH_HCOUNTER m_cNetS = nullptr, m_cNetR = nullptr;
     PDH_HCOUNTER m_cThermal = nullptr;
+    PDH_HCOUNTER m_cCpuFreq = nullptr;
     bool m_hasTemp = false;
     bool m_pdhReady = false;
 

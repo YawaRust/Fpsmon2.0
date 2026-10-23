@@ -133,7 +133,10 @@ function useDrag(frameRef: React.RefObject<HTMLDivElement | null>, onMove: (x: n
 export default function Playground({
   snap, engine, brand, isEmbedded = false,
 }: { snap: SimSnapshot; engine: SimEngine; brand: string; isEmbedded?: boolean }) {
-  const [settings, setSettings] = useState<OverlaySettings>(() => defaultSettings());
+  const [settings, setSettings] = useState<OverlaySettings>(() => ({
+    ...defaultSettings(),
+    ...(import.meta.env.DEV ? { gpuNames: ['NVIDIA GeForce RTX 4070', 'AMD Radeon RX 7800 XT'] } : {}),
+  }));
 
   // Синхронизация с нативным хостом (WebView2)
   useEffect(() => {
@@ -141,8 +144,21 @@ export default function Playground({
 
     const onMessage = (event: any) => {
       if (event.data && typeof event.data === 'object') {
-        // C++ прислал актуальные настройки
-        setSettings(event.data);
+        // C++ sends a native snapshot with slightly different field names; merge it
+        // into the React model so missing web-only fields (blocks, hotkeys, colors) survive.
+        const native = event.data;
+        setSettings((current) => ({
+          ...current,
+          ...native,
+          updateInterval: native.updateIntervalMs ?? current.updateInterval,
+          fpsInterval: native.fpsIntervalMs ?? current.fpsInterval,
+          direction: typeof native.direction === 'number'
+            ? (native.direction === 1 ? 'row' : 'column')
+            : current.direction,
+          captureMode: typeof native.captureAllow === 'boolean'
+            ? (native.captureAllow ? 'allow' : 'exclude')
+            : current.captureMode,
+        }));
       }
     };
 
@@ -156,7 +172,7 @@ export default function Playground({
   // При любом изменении настроек в React — отправляем их в C++
   useEffect(() => {
     if (!isEmbedded || !window.chrome?.webview) return;
-    window.chrome?.webview?.postMessage({ type: 'update', settings });
+    window.chrome?.webview?.postMessage({ type: 'update', gpuIndex: settings.gpuIndex, settings });
   }, [settings, isEmbedded]);
   const [configOpen, setConfigOpen] = useState(true);
   const [overlayOn, setOverlayOn] = useState(true);

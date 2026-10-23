@@ -105,6 +105,9 @@ static void trayHandler(int id) {
 /* ---------- вход ---------- */
 
 int WINAPI WinMain(HINSTANCE hinst, HINSTANCE, LPSTR cmdLine, int) {
+    // WebView2 requires the UI thread to be a COM STA before creating its environment.
+    const HRESULT comHr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    const bool comInitialized = SUCCEEDED(comHr);
     g_inst = hinst;
 
     // один экземпляр
@@ -116,6 +119,7 @@ int WINAPI WinMain(HINSTANCE hinst, HINSTANCE, LPSTR cmdLine, int) {
             HWND other = FindWindowW(L"YawaSideOverlay", nullptr);
             if (other) PostMessageW(other, WM_APP + 100, 0, 0); // поднять конфиг
             CloseHandle(hMutex);
+            if (comInitialized) CoUninitialize();
             return 0;
         }
     }
@@ -145,6 +149,7 @@ int WINAPI WinMain(HINSTANCE hinst, HINSTANCE, LPSTR cmdLine, int) {
         DeleteFileA(configPath().c_str());
         LOG("config.ini удалён по запросу");
         ReleaseMutex(hMutex); CloseHandle(hMutex);
+        if (comInitialized) CoUninitialize();
         return 0;
     }
 
@@ -153,6 +158,7 @@ int WINAPI WinMain(HINSTANCE hinst, HINSTANCE, LPSTR cmdLine, int) {
         LOG("не удалось инициализировать оверлей");
         MessageBoxA(nullptr, "Не удалось инициализировать оверлей (D2D/окно).", "YawaFPS HUD", MB_ICONERROR);
         ReleaseMutex(hMutex); CloseHandle(hMutex);
+        if (comInitialized) CoUninitialize();
         return 1;
     }
 
@@ -194,5 +200,6 @@ int WINAPI WinMain(HINSTANCE hinst, HINSTANCE, LPSTR cmdLine, int) {
     ReleaseMutex(hMutex);
     CloseHandle(hMutex);
     LOG("=== выход ===");
+    if (comInitialized) CoUninitialize();
     return (int)msg.wParam;
 }
