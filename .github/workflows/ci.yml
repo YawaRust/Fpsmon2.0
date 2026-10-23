@@ -47,12 +47,12 @@ jobs:
         run: |
           $html = Get-Content dist/index.html -Raw -Encoding UTF8
           $prefix = @'
-#pragma once
-static const char* kEmbeddedUiHtml = R"HTML(
-'@
+          #pragma once
+          static const char* kEmbeddedUiHtml = R"HTML(
+          '@
           $suffix = @'
-)HTML";
-'@
+          )HTML";
+          '@
           ($prefix + $html + $suffix) | Set-Content native/src/overlay/EmbeddedUi.h -Encoding UTF8
 
       - name: Конфигурация
