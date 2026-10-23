@@ -156,8 +156,10 @@ SIZE Overlay::positionFor(int w, int h) {
         p.cx = m_set.position == 1 || m_set.position == 3 ? sw - w - 14 : 14;
         p.cy = m_set.position == 2 || m_set.position == 3 ? sh - h - 48 : 14;
         if (m_set.position == 4) { p.cx = m_set.customX; p.cy = m_set.customY; }
-        p.cx = (std::max)(0, (std::min)(p.cx, sw - w));
-        p.cy = (std::max)(0, (std::min)(p.cy, sh - h));
+        int x = (std::min)((int)p.cx, sw - w);
+        int y = (std::min)((int)p.cy, sh - h);
+        p.cx = (std::max)(0, x);
+        p.cy = (std::max)(0, y);
         return p;
     }
     switch (m_set.position) {
