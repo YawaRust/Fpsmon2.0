@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.0.1 — 2026-10-23
+
+### Исправления
+- Merge pull request #1 from YawaRust/arena/ff1b7f56-fpsmon2-0 ()
+- fix: define CPU power info struct for CallNtPowerInformation ()
+- fix: make MSVC optimization flags Release-only ()
+- fix: add prebuilt app.ico to avoid CMake HEX_DECODE failure ()
+- fix: correct YAML indentation for embedded UI here-strings ()
+- fix: repair CI embedding and native sensor/GPU handling ()
+
+### Прочее
+- Add files via upload ()
+- Fix_2 ()
+
+
 Все заметные изменения проекта. Версии идут по `0.0.X` — каждый фикс-релиз. Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версии — по [Semantic Versioning](https://semver.org/lang/ru/). Файл обновляется автоматически
 воркфлоу `.github/workflows/release.yml` при каждом релизе.
