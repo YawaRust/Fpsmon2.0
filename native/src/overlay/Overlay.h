@@ -3,8 +3,6 @@
 #include "../config/Model.h"
 #include "../core/Sensors.h"
 
-class ConfigPanelWeb;
-
 /*
  * Layered-окно с per-pixel alpha.
  * Рендер через ID2D1DCRenderTarget → UpdateLayeredWindow.
@@ -68,6 +66,7 @@ private:
     HWND m_hwnd = nullptr;
     bool m_visible     = true;
     bool m_configOpen  = false;
+    bool m_configRestoreVisible = true;
     bool m_dirty       = true;
 
     ID2D1Factory*         m_factory  = nullptr;
@@ -89,7 +88,6 @@ private:
     bool  m_drag      = false;
     POINT m_dragStart{};
 
-    ConfigPanelWeb* m_configWeb = nullptr;
 };
 
 extern void (*g_trayMsgHandler)(int id);

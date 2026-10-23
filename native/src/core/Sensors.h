@@ -32,7 +32,7 @@ public:
     const std::vector<std::wstring>& gpuNames() const { return m_gpuNames; }
     int selectedGpu() const { return m_selectedGpu; }
     float vramTotal() const { return m_vramTotalMB; }
-    bool hasGpu() const { return m_vramTotalMB > 0 || m_cGpu != nullptr; }
+    bool hasGpu() const { return !m_gpuNames.empty(); }
     void setSelectedGpu(int idx);
 
     float value(SensorId id) const { return m_v[(int)id]; }
@@ -41,8 +41,6 @@ public:
     int histHead() const { return m_histIdx; }
 
 private:
-    void pollThermal();   // макс. температура зон охлаждения (единый счётчик)
-    double pdhMaxArray(PDH_HCOUNTER c);
     double pdhMaxArrayFiltered(PDH_HCOUNTER c, const std::string& filter);
     double pdhSumArray(PDH_HCOUNTER c);
     double pdhScalar(PDH_HCOUNTER c);
@@ -60,9 +58,7 @@ private:
     PDH_HCOUNTER m_cGpu = nullptr;
     PDH_HCOUNTER m_cDiskR = nullptr, m_cDiskW = nullptr, m_cDiskT = nullptr;
     PDH_HCOUNTER m_cNetS = nullptr, m_cNetR = nullptr;
-    PDH_HCOUNTER m_cThermal = nullptr;
     PDH_HCOUNTER m_cCpuFreq = nullptr;
-    bool m_hasTemp = false;
     bool m_pdhReady = false;
 
     // DXGI VRAM

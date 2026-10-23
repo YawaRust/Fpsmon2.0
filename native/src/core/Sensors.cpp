@@ -25,25 +25,8 @@ double SystemMonitor::pdhScalar(PDH_HCOUNTER c) {
     return v.doubleValue;
 }
 
-double SystemMonitor::pdhMaxArray(PDH_HCOUNTER c) {
-    if (!c) return 0.0;
-    DWORD size = 0, count = 0;
-    if (PdhGetFormattedCounterArrayA(c, PDH_FMT_DOUBLE, &size, &count, nullptr)
-        != PDH_MORE_DATA || size == 0)
-        return 0.0;
-    std::vector<BYTE> buf(size);
-    auto* arr = (PDH_FMT_COUNTERVALUE_ITEM_A*)buf.data();
-    if (PdhGetFormattedCounterArrayA(c, PDH_FMT_DOUBLE, &size, &count, arr) != ERROR_SUCCESS)
-        return 0.0;
-    double mx = 0.0;
-    for (DWORD i = 0; i < count; i++)
-        if (arr[i].FmtValue.CStatus == ERROR_SUCCESS && arr[i].FmtValue.doubleValue > mx)
-            mx = arr[i].FmtValue.doubleValue;
-    return mx;
-}
-
 double SystemMonitor::pdhMaxArrayFiltered(PDH_HCOUNTER c, const std::string& filter) {
-    if (!c) return 0.0;
+    if (!c || filter.empty()) return 0.0;
     DWORD size = 0, count = 0;
     if (PdhGetFormattedCounterArrayA(c, PDH_FMT_DOUBLE, &size, &count, nullptr)
         != PDH_MORE_DATA || size == 0)
@@ -53,21 +36,11 @@ double SystemMonitor::pdhMaxArrayFiltered(PDH_HCOUNTER c, const std::string& fil
     if (PdhGetFormattedCounterArrayA(c, PDH_FMT_DOUBLE, &size, &count, arr) != ERROR_SUCCESS)
         return 0.0;
     double mx = 0.0;
-    bool any = false;
     for (DWORD i = 0; i < count; i++) {
         if (arr[i].FmtValue.CStatus != ERROR_SUCCESS) continue;
         std::string name = arr[i].szName ? arr[i].szName : "";
-        if (!filter.empty() && name.find(filter) == std::string::npos) continue;
-        any = true;
+        if (name.find(filter) == std::string::npos) continue;
         if (arr[i].FmtValue.doubleValue > mx) mx = arr[i].FmtValue.doubleValue;
-    }
-    if (!any && !filter.empty()) {
-        // fallback: если фильтр не совпал — берём максимум по всем
-        for (DWORD i = 0; i < count; i++) {
-            if (arr[i].FmtValue.CStatus == ERROR_SUCCESS &&
-                arr[i].FmtValue.doubleValue > mx)
-                mx = arr[i].FmtValue.doubleValue;
-        }
     }
     return mx;
 }
@@ -102,20 +75,15 @@ bool SystemMonitor::init(int gpuIndex) {
         for (UINT i = 0; ; i++) {
             IDXGIAdapter1* ad = nullptr;
             if (FAILED(fac1->EnumAdapters1(i, &ad))) break;
-            m_adapters.push_back(ad);
             DXGI_ADAPTER_DESC1 desc{};
-            if (SUCCEEDED(ad->GetDesc1(&desc))) {
-                m_gpuNames.push_back(desc.Description);
-                m_gpuLuids.push_back(desc.AdapterLuid);
-            } else {
-                m_gpuNames.push_back(L"GPU");
-                LUID z{}; m_gpuLuids.push_back(z);
+            if (FAILED(ad->GetDesc1(&desc)) || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+                ad->Release();
+                continue;
             }
+            m_adapters.push_back(ad);
+            m_gpuNames.push_back(desc.Description);
+            m_gpuLuids.push_back(desc.AdapterLuid);
         }
-    }
-    if (m_gpuNames.empty()) {
-        m_gpuNames.push_back(L"GPU");
-        LUID z{}; m_gpuLuids.push_back(z);
     }
     // Выбираем адаптер с наибольшим объёмом видеопамяти по умолчанию
     int best = 0;
@@ -144,8 +112,6 @@ bool SystemMonitor::init(int gpuIndex) {
         PdhAddEnglishCounterA(m_q, "\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_cDiskT);
         PdhAddEnglishCounterA(m_q, "\\Network Interface(*)\\Bytes Sent/sec", 0, &m_cNetS);
         PdhAddEnglishCounterA(m_q, "\\Network Interface(*)\\Bytes Received/sec", 0, &m_cNetR);
-        if (PdhAddEnglishCounterA(m_q, "\\Thermal Zone Information(*)\\Temperature", 0, &m_cThermal) == ERROR_SUCCESS)
-            m_hasTemp = true;
         PdhAddEnglishCounterA(m_q, "\\Processor Information(_Total)\\Processor Frequency", 0, &m_cCpuFreq);
 
         PdhCollectQueryData(m_q);
@@ -247,16 +213,6 @@ void SystemMonitor::resetStats() {
 
 /* ---------- системные датчики ---------- */
 
-void SystemMonitor::pollThermal() {
-    if (!m_hasTemp) return;
-    double k = pdhMaxArray(m_cThermal); // Кельвины
-    double c = k - 273.15;
-    if (c > 5.0 && c < 130.0) {
-        m_v[(int)SensorId::CPUTemp] = (float)c;
-        m_v[(int)SensorId::GPUTemp] = (float)c; // системная зона; per-GPU — только с vendor SDK
-    }
-}
-
 void SystemMonitor::pollSys() {
     if (m_pdhReady) {
         PdhCollectQueryData(m_q);
@@ -332,7 +288,6 @@ void SystemMonitor::pollSys() {
 
     // ── PDH ──
     if (m_pdhReady) {
-        PdhCollectQueryData(m_q);
         m_v[(int)SensorId::GPUUsage] = (float)pdhMaxArrayFiltered(m_cGpu, m_gpuFilter);
         m_v[(int)SensorId::DiskRead] = (float)(pdhScalar(m_cDiskR) / (1024.0 * 1024.0));
         m_v[(int)SensorId::DiskWrite] = (float)(pdhScalar(m_cDiskW) / (1024.0 * 1024.0));
@@ -341,7 +296,6 @@ void SystemMonitor::pollSys() {
         m_v[(int)SensorId::DiskActive] = (float)dt;
         m_v[(int)SensorId::NetUp] = (float)(pdhSumArray(m_cNetS) / 1024.0);
         m_v[(int)SensorId::NetDown] = (float)(pdhSumArray(m_cNetR) / 1024.0);
-        pollThermal();
     }
 }
 
