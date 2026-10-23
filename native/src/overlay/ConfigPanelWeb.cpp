@@ -172,10 +172,15 @@ bool ConfigPanelWeb::create(HWND parentHwnd) {
 void ConfigPanelWeb::show(bool v) {
     if (!m_hwnd) return;
     if (v) {
-        // Позиционируем справа от оверлея
+        // Позиционируем рядом с оверлеем, чтобы не уйти за край экрана
         RECT or_; GetWindowRect(m_parent->hwnd(), &or_);
+        int sw = GetSystemMetrics(SM_CXSCREEN);
         int px = or_.right + 14;
+        if (px + 400 > sw) px = or_.left - 400 - 14;
+        if (px < 0) px = 14;
         int py = or_.top;
+        if (py + 620 > GetSystemMetrics(SM_CYSCREEN)) py = GetSystemMetrics(SM_CYSCREEN) - 620 - 14;
+        if (py < 0) py = 14;
         SetWindowPos(m_hwnd, HWND_TOPMOST, px, py, 400, 620, SWP_NOACTIVATE);
         if (m_impl && m_impl->controller) {
             RECT r; GetClientRect(m_hwnd, &r);

@@ -31,6 +31,8 @@ public:
     int gpuCount() const { return (int)m_gpuNames.size(); }
     const std::vector<std::wstring>& gpuNames() const { return m_gpuNames; }
     int selectedGpu() const { return m_selectedGpu; }
+    float vramTotal() const { return m_vramTotalMB; }
+    bool hasGpu() const { return m_vramTotalMB > 0 || m_cGpu != nullptr; }
     void setSelectedGpu(int idx);
 
     float value(SensorId id) const { return m_v[(int)id]; }
