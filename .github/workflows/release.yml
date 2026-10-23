@@ -44,7 +44,11 @@ jobs:
         shell: bash
         run: |
           set -e
+          git fetch --tags --force 2>/dev/null || true
           LAST=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -z "$LAST" ]; then
+            LAST=$(git tag --sort=-v:refname 2>/dev/null | head -1 || true)
+          fi
           if [ -z "$LAST" ]; then
             # релизов ещё не было — считаем всю историю
             RANGE="HEAD"

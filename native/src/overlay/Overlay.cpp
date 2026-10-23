@@ -125,6 +125,7 @@ float Overlay::measure(int& outW, int& outH) {
     float f = m_set.fontSize, lineH = f * 1.22f + m_set.rowGap, wMax = 0, h = (float)m_set.padding;
     for (const auto& b : m_set.blocks) {
         if (!b.enabled || b.items.empty()) continue;
+        if (b.hw == 2 && !m_mon.hasGpu()) continue;
         float bw = 0, by = 0;
         if (b.showTitle && !b.title.empty()) by += f * 0.72f + 2;
         float cw = 0; bool first = true;
@@ -173,6 +174,7 @@ void Overlay::draw() {
     float y = (float)m_set.padding;
     for (const auto& b : m_set.blocks) {
         if (!b.enabled || b.items.empty()) continue;
+        if (b.hw == 2 && !m_mon.hasGpu()) continue;
         if (b.showTitle) { text(m_set.padding, y, b.title.c_str(), m_theme.label, m_set.fontSize * 0.7f, true); y += m_set.fontSize; }
         bool first = true; float cx = (float)m_set.padding;
         for (const auto& it : b.items) {
