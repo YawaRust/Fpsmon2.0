@@ -259,6 +259,13 @@ LRESULT CALLBACK Overlay::WndProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     Overlay* o = (Overlay*)GetWindowLongPtrW(h, GWLP_USERDATA);
     if (!o) return DefWindowProcW(h, m, wp, lp);
     if (m == WM_TIMER) { o->poll(16); return 0; }
+    if (m == WM_TRAYICON) {
+        if (g_trayMsgHandler) {
+            if (lp == WM_RBUTTONUP || lp == WM_CONTEXTMENU) g_trayMsgHandler(-1);
+            else if (lp == WM_LBUTTONDBLCLK) g_trayMsgHandler(-2);
+        }
+        return 0;
+    }
     if (m == WM_HOTKEY) { if (wp == 101) o->toggleConfig(); if (wp == 100) o->toggleVisible(); return 0; }
     if (m == WM_LBUTTONDOWN) { o->m_drag = true; SetCapture(h); GetCursorPos(&o->m_dragStart); return 0; }
     if (m == WM_LBUTTONUP) {

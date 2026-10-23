@@ -147,6 +147,10 @@ bool ConfigPanelWeb::create(HWND parentHwnd) {
                                     [self](ICoreWebView2*, ICoreWebView2NavigationCompletedEventArgs*) -> HRESULT {
                                         self->m_impl->ready = true;
                                         self->sendSettings(self->m_parent->settings());
+                                        if (self->m_pendingShow) {
+                                            self->m_pendingShow = false;
+                                            ShowWindow(self->m_hwnd, SW_SHOW);
+                                        }
                                         return S_OK;
                                     }).Get(), nullptr);
 
@@ -178,7 +182,15 @@ void ConfigPanelWeb::show(bool v) {
             m_impl->controller->put_Bounds(r);
         }
     }
-    ShowWindow(m_hwnd, v ? SW_SHOW : SW_HIDE);
+    if (v) {
+        if (m_impl && m_impl->ready) {
+            ShowWindow(m_hwnd, SW_SHOW);
+        } else {
+            m_pendingShow = true;
+        }
+    } else {
+        ShowWindow(m_hwnd, SW_HIDE);
+    }
 }
 
 bool ConfigPanelWeb::isReady() const { return m_impl && m_impl->ready; }
