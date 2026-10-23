@@ -15,14 +15,6 @@ struct ConfigPanelWeb::Impl {
     bool ready = false;
 };
 
-static std::wstring getHtmlPath() {
-    wchar_t exe[MAX_PATH];
-    GetModuleFileNameW(nullptr, exe, MAX_PATH);
-    std::wstring dir(exe);
-    dir = dir.substr(0, dir.find_last_of(L"\\"));
-    return dir + L"\\www\\index.html";
-}
-
 ConfigPanelWeb::ConfigPanelWeb(Overlay* p) : m_parent(p) { m_impl = new Impl(); }
 ConfigPanelWeb::~ConfigPanelWeb() { destroy(); delete m_impl; }
 

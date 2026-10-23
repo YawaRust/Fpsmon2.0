@@ -127,6 +127,9 @@ struct Settings {
     // фреймген (модуль per-process hook планируется в v0.1)
     bool fgDetect = true;
 
+    // индекс выбранного GPU (0-based) при наличии нескольких адаптеров
+    int gpuIndex = 0;
+
     HotkeyCfg hk[HK_COUNT];
 
     std::vector<BlockCfg> blocks;

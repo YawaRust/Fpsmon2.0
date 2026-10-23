@@ -205,13 +205,14 @@ jobs:
         shell: pwsh
         run: |
           $html = Get-Content dist/index.html -Raw -Encoding UTF8
-          $content = @"
-#pragma once
-static const char* kEmbeddedUiHtml = R"HTML(
-$html
-)HTML";
-"@
-          Set-Content native/src/overlay/EmbeddedUi.h $content -Encoding UTF8
+          $prefix = @'
+          #pragma once
+          static const char* kEmbeddedUiHtml = R"HTML(
+          '@
+          $suffix = @'
+          )HTML";
+          '@
+          ($prefix + $html + $suffix) | Set-Content native/src/overlay/EmbeddedUi.h -Encoding UTF8
 
       - name: Сборка C++
         shell: pwsh

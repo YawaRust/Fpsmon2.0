@@ -205,6 +205,7 @@ void Settings::sanitize() {
     clampf(bgOpacity, 0.f, 1.f);
     if (updateIntervalMs < 100) updateIntervalMs = 100;
     if (fpsIntervalMs < 50) fpsIntervalMs = 50;
+    if (gpuIndex < 0) gpuIndex = 0;
     position = position < 0 ? 0 : (position > 4 ? 4 : position);
 }
 
@@ -233,6 +234,7 @@ bool Settings::load() {
     alwaysOnTop      = GetPrivateProfileIntA("General", "alwaysOnTop", alwaysOnTop ? 1 : 0, path) != 0;
     clickThrough     = GetPrivateProfileIntA("General", "clickThrough", clickThrough ? 1 : 0, path) != 0;
     fgDetect         = GetPrivateProfileIntA("General", "frameGenDetect", fgDetect ? 1 : 0, path) != 0;
+    gpuIndex         = GetPrivateProfileIntA("General", "gpuIndex", gpuIndex, path);
 
     char buf[512];
     if (GetPrivateProfileStringA("Capture", "mode", "", buf, sizeof(buf), path) > 0)
@@ -330,8 +332,9 @@ bool Settings::save() const {
         APP_VERSION, position, customX, customY);
     fprintf(f, "direction=%d\nupdateInterval=%d\nfpsUpdateInterval=%d\n",
         direction, updateIntervalMs, fpsIntervalMs);
-    fprintf(f, "alwaysOnTop=%s\nclickThrough=%s\nframeGenDetect=%s\n\n",
+    fprintf(f, "alwaysOnTop=%s\nclickThrough=%s\nframeGenDetect=%s\n",
         B(alwaysOnTop), B(clickThrough), B(fgDetect));
+    fprintf(f, "gpuIndex=%d\n\n", gpuIndex);
 
     fprintf(f, "[Capture]\nmode=%s\ndisplayAffinity=%s\n\n",
         captureAllow ? "allow" : "exclude",

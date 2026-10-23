@@ -20,13 +20,18 @@
 
 class SystemMonitor {
 public:
-    bool init();
+    bool init(int gpuIndex = 0);
     void shutdown();
 
     void pollFast();   // кадры (fpsIntervalMs)
     void pollSys();     // железо (updateIntervalMs)
     void pushHistory(); // запись в ring-буферы (фикс 10 Гц)
     void resetStats();
+
+    int gpuCount() const { return (int)m_gpuNames.size(); }
+    const std::vector<std::wstring>& gpuNames() const { return m_gpuNames; }
+    int selectedGpu() const { return m_selectedGpu; }
+    void setSelectedGpu(int idx);
 
     float value(SensorId id) const { return m_v[(int)id]; }
     const float* hist(SensorId id) const { return m_hist[(int)id]; }
@@ -36,6 +41,7 @@ public:
 private:
     void pollThermal();   // макс. температура зон охлаждения (единый счётчик)
     double pdhMaxArray(PDH_HCOUNTER c);
+    double pdhMaxArrayFiltered(PDH_HCOUNTER c, const std::string& filter);
     double pdhSumArray(PDH_HCOUNTER c);
     double pdhScalar(PDH_HCOUNTER c);
 
@@ -60,6 +66,12 @@ private:
     IDXGIFactory1* m_factory = nullptr;
     IDXGIAdapter3* m_adapter3 = nullptr;
     float m_vramTotalMB = 0.f;
+
+    std::vector<IDXGIAdapter1*> m_adapters;
+    std::vector<std::wstring> m_gpuNames;
+    std::vector<LUID> m_gpuLuids;
+    int m_selectedGpu = 0;
+    std::string m_gpuFilter;
 
     // кадры через DWM
     LARGE_INTEGER m_freq{};

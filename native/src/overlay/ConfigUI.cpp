@@ -225,6 +225,19 @@ void drawConfigUI(Overlay& o) {
         if(SLD(o,lx,cy,cw,L"Опрос железа",upd,100,2000))s.updateIntervalMs=(int)upd;cy+=30;
         float fps=(float)s.fpsIntervalMs;
         if(SLD(o,lx,cy,cw,L"FPS",fps,50,1000))s.fpsIntervalMs=(int)fps;cy+=30;
+        if(o.monitor().gpuCount() > 1) {
+            T(o,lx,cy,L"GPU",C_DIM,8.5f,false,0.9f);cy+=16;
+            for(int gi=0; gi<o.monitor().gpuCount(); gi++) {
+                const std::wstring& gn = o.monitor().gpuNames()[gi];
+                if(BTN(o,lx,cy,cw,24,gn.c_str(),s.gpuIndex==gi)) {
+                    s.gpuIndex = gi;
+                    o.monitor().setSelectedGpu(gi);
+                    o.applySettings(false);
+                }
+                cy+=28;
+            }
+            F(o,lx,cy,cw,1,C_BORDER,0.08f);cy+=8;
+        }
         F(o,lx,cy,cw,1,C_BORDER,0.08f);cy+=8;
         if(TOG(o,lx,cy,cw,L"Сквозные клики",s.clickThrough))o.applyClickThrough();cy+=24;
         if(TOG(o,lx,cy,cw,L"Поверх всех окон",s.alwaysOnTop))o.markDirty();cy+=24;
