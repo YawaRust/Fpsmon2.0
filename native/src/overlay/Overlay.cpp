@@ -4,6 +4,8 @@
 
 void (*g_trayMsgHandler)(int) = nullptr;
 
+static const UINT WM_TRAYICON = WM_APP + 42;
+
 static const wchar_t* CLS_NAME = L"YawaFPSHUD_Overlay";
 
 static int dpiOf(HWND hwnd) {
